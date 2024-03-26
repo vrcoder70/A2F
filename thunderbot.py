@@ -51,7 +51,7 @@ emotions = {
 }
 
 
-def generate_A2F_response(text: str="", first: bool = True):
+def generate_A2F_response(text: str=""):
     """
     Generates a response based on the provided text using OpenAI's ChatGPT model, converts the response to text-to-speech (TTS) audio,
     and sends the audio to an avatar-to-facetracking (A2F) system for playback.
@@ -129,37 +129,24 @@ def speech_to_text(audio: sr.AudioData) -> tuple[bool, Union[str, Type[Exception
 
 succesful_code = 200
 is_recording = False
-def keyboard_input_listener():
-    global is_recording
-    while True:
-        try:
-            key = input()
-            if key == "":
-                is_recording = not is_recording
-        except KeyboardInterrupt:
-            break
 
-print("Press Enter to start recording...")
-# Start keyboard input listener thread
-keyboard_thread = threading.Thread(target=keyboard_input_listener)
-keyboard_thread.daemon = True
-keyboard_thread.start()
+
 
 with ignoreStderr():
     status = requests.get(rest_api_url+"/status")
     if status.status_code != succesful_code:
         print("Error: unable to reach A2F...")
-        sys.exit()
-
-    a2f_instance = {"file_name" : streaming_player}
-    
+        sys.exit()    
+    with sr.Microphone() as source:
+        asr.adjust_for_ambient_noise(source, duration=5)
     # Request to load avatar Execute when run for first time in day
-    response = requests.post(rest_api_url+load_instance, json=a2f_instance)
-    if response.status_code != succesful_code:
-        print(f'Error: Unable to load {streaming_player}...')
-        sys.exit()
-    
-    print(f'A2F avatar uploaded')
+    # a2f_instance = {"file_name" : streaming_player}
+    # response = requests.post(rest_api_url+load_instance, json=a2f_instance)
+    # time.sleep(5)
+    # if response.status_code != succesful_code:
+    #     print(f'Error: Unable to load {streaming_player}...')
+    #     sys.exit()
+    # print(f'A2F avatar uploaded')
     
     # Optional
     # Request Player 
@@ -168,36 +155,35 @@ with ignoreStderr():
     #     print(f'Players not available...')
     #     sys.exit()
     # print(players['result'])
-    
-    with sr.Microphone() as source:
-        asr.adjust_for_ambient_noise(source, duration=7)
-        # Set emotions
-        emotions_response = requests.post(rest_api_url+set_emotions, json=emotions)
-        if emotions_response.status_code != 200:
-            print(f'Could not load emotions, please load manually...')
-        else:
-            print(f'Emotions are set')
-        
-        while True:
+
+    # Set emotions
+    emotions_response = requests.post(rest_api_url+set_emotions, json=emotions)
+    if emotions_response.status_code != 200:
+        print(f'Could not load emotions, please load manually...')
+    else:
+        print(f'Emotions are set')
+
+    while True:
+        with sr.Microphone() as source:
             if is_recording:
-                print('Say Something:')
-                asr.pause_threshold = 1
                 try:
+                    is_recording = False
+                    print('Say Something:')
+                    asr.pause_threshold = 0.5
                     audio = asr.listen(source)
                     is_valid_input, _input = speech_to_text(audio)
                     if is_valid_input and _input != "":
                         print("User : ", _input)
                         generate_A2F_response(_input)
-                        is_recording = False
                     else:
-                        if _input is sr.RequestError:
-                            print("No response from Google Speech Recognition service: {0}".format(_input))
-                except sr.WaitTimeoutError:
-                    print("Error: No speech detected for 2 seconds.")
-                    print("Press Enter to start recording...")
-                    is_recording = False
-                    time.sleep(0.1)
-                    continue
+                        print("No valid input received.")
+                except Exception as e:
+                    print(f"Error: {e}")
+                    time.sleep(5)
+        print("Press Enter to continue...")     
+        input()
+        is_recording = True
+                    
             
                 
             
